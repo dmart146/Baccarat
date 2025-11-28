@@ -4,15 +4,23 @@
 std::string play(Cards &deck);
 
 int main(int argc, char **argv) {
+    Cards deck;
     if(argc > 1) {
-        Cards deck(std::stoi(argv[1]));
+        deck = Cards(std::stoi(argv[1]));
         deck.shuffle();
         std::cout << "Created and shuffled a shoe with " << argv[1] << " decks.\n";
     } else {
-        Cards deck;
         deck.shuffle();
         std::cout << "Created and shuffled a single deck.\n";
     }
+    //burn the shoe
+    std::string burnedCard = deck.draw();
+    std::cout << "Burned card: " << burnedCard << "\n";
+    for(int i=0; i<(stoi(burnedCard.substr(0, burnedCard.length() - 3))-1); i++) {
+        deck.draw();
+        std::cout << "Burned a Card\n";
+    }
+
 
     std::string input;
     std::cout << "Enter bet (B or P followed by amount): ";
