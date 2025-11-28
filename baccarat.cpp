@@ -1,7 +1,9 @@
 #include <iostream>
 #include "cards.h"
+#include <regex>
 
 std::string play(Cards &deck);
+int convert(const  std::string &card);
 
 int main(int argc, char **argv) {
     Cards deck;
@@ -16,28 +18,24 @@ int main(int argc, char **argv) {
     //burn the shoe
     std::string burnedCard = deck.draw();
     std::cout << "Burned card: " << burnedCard << "\n";
-    for(int i=0; i<(stoi(burnedCard.substr(0, burnedCard.length() - 3))-1); i++) {
+    if(convert(burnedCard) == 0) {
+        for(int i=0; i<10; i++) {
+            deck.draw();
+            std::cout << "Burned a Card\n";
+        }
+    }
+    for(int i=0; i<(convert(burnedCard)-1); i++) {
         deck.draw();
         std::cout << "Burned a Card\n";
     }
+    std::cout << "Starting Baccarat Game!\n";
 
 
     std::string input;
     std::cout << "Enter bet (B or P followed by amount): ";
-    std::cin >> input;
+    std::getline(std::cin, input);
+    std::cout << "Received input: " << input << "\n";
 
-input_start:
-    if (input.length() > 1) {
-        char choice = input[0];
-        int amount = std::stoi(input.substr(1));
-        if (choice == 'B' || choice == 'P') {
-            std::cout << "Bet: " << choice << " for $" << amount << "\n";
-        }
-        else{
-            std::cout << "Invalid bet choice.\n";
-            goto input_start;
-        }
-    }
     
     return 0;
 }
