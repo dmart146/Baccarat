@@ -18,6 +18,6 @@ private:
     int dragonBalance;
     int pandaBalance;
     int payout = 0;
-}
+};
 
-#endif // PLAYER_H
+#endif // PLAYER_H 
