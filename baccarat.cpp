@@ -44,26 +44,92 @@ int main(int argc, char **argv) {
 
     std::string input;
     int amount = 0;
+    int dragon = 0;
+    int panda = 0;
     while (input != "quit" || amount != -1) {
-        std::cout << "Enter bet (B or P followed by amount): ";
+        std::cout << "Enter bet (B or P followed by amount, optional bonuses: D # and/or P #): ";
         std::getline(std::cin, input);
         std::cout << "Received input: " << input << "\n";
-        
+
         std::smatch m;
-        std::regex re(R"(^\s*([bp])\s+(\d+)\s*$)", std::regex_constants::icase);
+        // main side and amount, then up to two optional bonus pairs (D # or P #) in any order
+        std::regex re(R"(^\s*([bpBP])\s+(\d+)(?:\s+([dpDP])\s+(\d+))?(?:\s+([dpDP])\s+(\d+))?\s*$)");
         if (!std::regex_match(input, m, re)) {
-            std::cout << "Invalid input. Expected 'B <amount>' or 'P <amount>'.\n";
+            std::cout << "Invalid input. Expected 'B <amount>' or 'P <amount>' with optional 'D <amount>' and/or 'P <amount>' after.\n";
             return 1;
         }
+
         std::string side = m[1].str();           // "B" or "P" (case as entered)
-        amount = std::stoi(m[2].str());      // bet amount
+        amount = std::stoi(m[2].str());          // main bet amount
+        dragon = 0;
+        panda = 0;
+
+        // first optional bonus (groups 3 and 4)
+        if (m[3].matched) {
+            char bonus = std::toupper(m[3].str()[0]);
+            int val = std::stoi(m[4].str());
+            if (bonus == 'D') dragon = val;
+            else if (bonus == 'P') panda = val;
+            else {
+            std::cout << "Invalid bonus type: " << m[3].str() << "\n";
+            return 1;
+            }
+        }
+
+        // second optional bonus (groups 5 and 6)
+        if (m[5].matched) {
+            char bonus = std::toupper(m[5].str()[0]);
+            int val = std::stoi(m[6].str());
+            if (bonus == 'D') {
+            if (dragon != 0) {
+                std::cout << "Duplicate Dragon bonus.\n";
+                return 1;
+            }
+            dragon = val;
+            } else if (bonus == 'P') {
+            if (panda != 0) {
+                std::cout << "Duplicate Panda bonus.\n";
+                return 1;
+            }
+            panda = val;
+            } else {
+            std::cout << "Invalid bonus type: " << m[5].str() << "\n";
+            return 1;
+            }
+        }
 
         std::cout << "Parsed bet: " << side << " " << amount << "\n";
 
         // proceed with game
         std::string result = "";
         int win = play(deck, result);
-        //introduce a switch to evaluate wins and take from money based on win
+        switch(win){
+            case 1:
+                if(side == "P" || side == "p") {
+                    money += amount;
+                    result += " -- Player wins! You win " + std::to_string(amount) + "\n";
+                } else {
+                    money -= amount;
+                    result += " -- Player wins! You lose " + std::to_string(amount) + "\n";
+                }
+                break;
+            case 2:
+                if(side == "B" || side == "b") {
+                    money += amount;
+                    result += " -- Banker wins! You win " + std::to_string(amount) + "\n";
+                } else {
+                    money -= amount;
+                    result += " -- Banker wins! You lose " + std::to_string(amount) + "\n";
+                }
+                break;
+            //include ties and special wins
+            case 3:
+                break;
+            case 4:
+                break;
+            case 5:
+                break;
+        }
         std::cout << result << "\n";
     }
 
