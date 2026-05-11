@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Baccarat</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --panel: #060810;
+      --fg: #d8d8d2;
+      --accent: #d4af37;
+      --dim: #888;
+      --border: #20232b;
+      --you: #6ec1ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "SF Mono", "Menlo", "Consolas", monospace;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; }
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    h1 {
+      color: var(--accent);
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.08em;
+    }
+    .status { color: var(--dim); font-size: 12px; }
+    .status.ok { color: #4ade80; }
+    .status.bad { color: #ef4444; }
+
+    .config {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      color: var(--dim);
+      font-size: 12px;
+    }
+    .config input {
+      width: 80px;
+      background: var(--panel);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      padding: 4px 6px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .config button {
+      background: var(--accent);
+      color: #111;
+      border: 0;
+      padding: 5px 12px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .config button:hover { background: #e6c14a; }
+
+    #term {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      height: 60vh;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.45;
+    }
+    #term .echo { color: var(--you); }
+
+    .inputrow {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    #input {
+      flex: 1;
+      background: var(--panel);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    #input:focus { border-color: var(--accent); }
+    #input:disabled { opacity: 0.5; }
+
+    .hint {
+      color: var(--dim);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .hint code {
+      color: var(--fg);
+      background: #161922;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>♠ ♥  BACCARAT  ♦ ♣</h1>
+      <div id="status" class="status">disconnected</div>
+    </header>
+
+    <div class="config">
+      <label>Decks <input id="decks" type="number" value="6" min="1" max="12"></label>
+      <label>Starting $ <input id="money" type="number" value="1000" min="1"></label>
+      <button id="start">Start / Restart</button>
+    </div>
+
+    <div id="term" aria-live="polite"></div>
+
+    <div class="inputrow">
+      <input id="input" placeholder="Type a bet and press Enter…" disabled autocomplete="off">
+    </div>
+
+    <div class="hint">
+      Examples:
+      <code>B 100</code>
+      <code>P 50 D 25</code>
+      <code>P 100 PA 10</code>
+      <code>B 100 D 25 PA 10</code>
+      <code>quit</code>
+    </div>
+  </div>
+
+  <script>
+    const term   = document.getElementById('term');
+    const input  = document.getElementById('input');
+    const status = document.getElementById('status');
+    const decksEl = document.getElementById('decks');
+    const moneyEl = document.getElementById('money');
+    const startBtn = document.getElementById('start');
+
+    let ws = null;
+
+    function append(text, cls) {
+      const node = document.createElement('span');
+      if (cls) node.className = cls;
+      node.textContent = text;
+      term.appendChild(node);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function setStatus(msg, kind) {
+      status.textContent = msg;
+      status.className = 'status ' + (kind || '');
+    }
+
+    function connect() {
+      if (ws) { try { ws.close(); } catch (_) {} }
+      term.textContent = '';
+      input.disabled = true;
+
+      const decks = encodeURIComponent(decksEl.value || '6');
+      const money = encodeURIComponent(moneyEl.value || '1000');
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${proto}://${location.host}/ws?decks=${decks}&money=${money}`);
+
+      ws.onopen = () => {
+        setStatus('connected', 'ok');
+        input.disabled = false;
+        input.focus();
+      };
+      ws.onmessage = (e) => append(e.data);
+      ws.onclose = () => {
+        setStatus('disconnected', 'bad');
+        input.disabled = true;
+        append('\n[session closed]\n');
+      };
+      ws.onerror = () => setStatus('error', 'bad');
+    }
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || ws == null || ws.readyState !== WebSocket.OPEN) return;
+      const v = input.value;
+      if (!v) return;
+      append(v + '\n', 'echo');
+      ws.send(v);
+      input.value = '';
+    });
+
+    startBtn.addEventListener('click', connect);
+    window.addEventListener('load', connect);
+  </script>
+</body>
+</html>

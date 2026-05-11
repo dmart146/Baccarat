@@ -9,7 +9,13 @@ public:
     Player();
 
     void updateBets(std::string bet, int balance, int dragonBet, int pandaBet);
-    
+
+    // Returns net payout: positive = win, negative = loss.
+    // result codes: 1=player, 2=banker, 3=tie, 4=panda8, 5=dragon7
+    int calculatePayout(int result) const;
+
+    std::string getBet() const { return baseBet; }
+
 private:
     std::string baseBet;
     int baseBalance;
@@ -17,7 +23,6 @@ private:
     bool panda; 
     int dragonBalance;
     int pandaBalance;
-    int payout = 0;
 };
 
 #endif // PLAYER_H 
