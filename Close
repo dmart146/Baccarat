@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Close — stop the baccarat server, kill any leftover processes, and
+#         clean up build artifacts and logs. Keeps .venv so restarts are fast.
+#
+# Usage:
+#   ./Close          # stop server, clean build artifacts
+#   ./Close --all    # also remove .venv (forces full reinstall on next Start)
+
+set +e
+cd "$(dirname "$0")"
+
+PIDFILE=".server.pid"
+LOGFILE="server.log"
+
+# 1. Stop the server we started (via pid file)
+if [ -f "$PIDFILE" ]; then
+    pid=$(cat "$PIDFILE")
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "==> Stopping server (PID $pid)..."
+        kill "$pid" 2>/dev/null
+        for i in 1 2 3 4 5; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.4
+        done
+        kill -9 "$pid" 2>/dev/null
+    fi
+    rm -f "$PIDFILE"
+fi
+
+# 2. Belt-and-suspenders: clean up anything else we might have left behind
+if command -v lsof >/dev/null; then
+    leftover=$(lsof -ti:8000 2>/dev/null)
+    if [ -n "$leftover" ]; then
+        echo "==> Releasing port 8000 (PIDs: $leftover)"
+        kill $leftover 2>/dev/null
+        sleep 0.3
+        kill -9 $leftover 2>/dev/null
+    fi
+fi
+pkill -f "uvicorn server:app" 2>/dev/null
+pkill -x baccarat 2>/dev/null
+
+# 3. Clean build artifacts
+echo "==> Cleaning build artifacts..."
+make clean -s 2>/dev/null
+
+# 4. Remove the log and any __pycache__
+rm -f "$LOGFILE"
+rm -rf __pycache__ static/__pycache__ 2>/dev/null
+
+# 5. Optional: nuke the venv too
+if [ "$1" = "--all" ]; then
+    echo "==> Removing .venv (will be recreated on next ./Start)..."
+    rm -rf .venv
+fi
+
+echo "==> Done. Everything stopped and cleaned."

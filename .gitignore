@@ -1,0 +1,18 @@
+# Python virtualenv
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build artifacts
+baccarat
+*.o
+
+# Server runtime files
+server.log
+.server.pid
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

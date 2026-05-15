@@ -1,46 +1,68 @@
 #include <iostream>
-#include "cards.h"
+#include <string>
 #include <regex>
+#include "cards.h"
+#include "player.h"
 
-//plays a game of baccarat
 int play(Cards &deck, std::string &result);
-//converts card string to number value for evaluation
-int convert(const  std::string &card);
+int convert(const std::string &card);
+int eval(int playerTotal, int bankerTotal, bool player3, bool banker3);
 
 int main(int argc, char **argv) {
-    Cards deck;
-    int money = 1000; //starting money
-    if(argc > 2) {
-        deck = Cards(std::stoi(argv[1]));
-        deck.shuffle();
-        std::cout << "Created and shuffled a shoe with " << argv[1] << " decks.\n";
-        money = std::stoi(argv[2]);
-    }
-    else if(argc > 1) {
-        deck = Cards(std::stoi(argv[1]));
-        deck.shuffle();
-        std::cout << "Created and shuffled a shoe with " << argv[1] << " decks.\n";
-    } else {
-        deck.shuffle();
-        std::cout << "Created and shuffled a single deck.\n";
-    }
-    std::cout << "Starting money set to " << money << "\n";
+    // Flush after every cout so prompts appear immediately when piped (e.g. web bridge).
+    std::cout << std::unitbuf;
 
-    //burn the shoe
-    std::string burnedCard = deck.draw();
-    std::cout << "Burned card: " << burnedCard << "\n";
-    if(convert(burnedCard) == 0) {
-        for(int i=0; i<10; i++) {
-            deck.draw();
-            std::cout << "Burned a Card\n";
+    int numDecks = 1;
+    int money = 1000;
+
+    if (argc > 2) {
+        numDecks = std::stoi(argv[1]);
+        money    = std::stoi(argv[2]);
+    } else if (argc > 1) {
+        numDecks = std::stoi(argv[1]);
+    }
+
+    Cards deck(numDecks);
+    deck.shuffle();
+    std::cout << "Shuffled shoe: " << numDecks << " deck(s).\n";
+    std::cout << "Starting balance: $" << money << "\n";
+
+    // Burn the first card; burn that many additional cards per casino rules
+    std::string burnCard = deck.draw();
+    std::cout << "Burned: " << burnCard << "\n";
+    int burnCount = convert(burnCard);
+    if (burnCount == 0) burnCount = 10;
+    for (int i = 0; i < burnCount - 1; i++) deck.draw();
+
+    std::cout << "\n=== Mini-Baccarat ===\n";
+    std::cout << "Bet format: B/P <amount> [D <amount>] [PA <amount>]\n";
+    std::cout << "  B=Banker  P=Player  D=Dragon7 side(40:1)  PA=Panda8 side(25:1)\n";
+    std::cout << "Type 'quit' to cash out.\n\n";
+
+    // Matches: B/P amount, optional D amount, optional PA amount
+    std::regex re(
+        R"(^\s*([bp])\s+(\d+)(?:\s+d\s+(\d+))?(?:\s+pa\s+(\d+))?\s*$)",
+        std::regex_constants::icase
+    );
+    std::string input;
+
+    while (true) {
+        // Reshuffle when fewer than 15 cards remain
+        if (static_cast<int>(deck.size()) < 15) {
+            std::cout << "[Shoe running low — reshuffling]\n";
+            deck = Cards(numDecks);
+            deck.shuffle();
+            std::string bc = deck.draw();
+            int n = convert(bc);
+            if (n == 0) n = 10;
+            for (int i = 0; i < n - 1; i++) deck.draw();
         }
-    }
-    for(int i=0; i<(convert(burnedCard)-1); i++) {
-        deck.draw();
-        std::cout << "Burned a Card\n";
-    }
-    std::cout << "Starting Baccarat Game!\n";
 
+        std::cout << "Balance: $" << money << "  |  Cards: " << deck.size() << "\n";
+        std::cout << "Bet: ";
+        if (!std::getline(std::cin, input)) break;
+
+        if (input == "quit") break;
 
     std::string input;
     int amount = 0;
@@ -98,162 +120,135 @@ int main(int argc, char **argv) {
             }
         }
 
-        std::cout << "Parsed bet: " << side << " " << amount << "\n";
+        std::string side  = m[1].str();
+        int betAmt        = std::stoi(m[2].str());
+        int dragonAmt     = m[3].matched ? std::stoi(m[3].str()) : 0;
+        int pandaAmt      = m[4].matched ? std::stoi(m[4].str()) : 0;
+        int totalBet      = betAmt + dragonAmt + pandaAmt;
 
-        // proceed with game
-        std::string result = "";
-        int win = play(deck, result);
-        switch(win){
-            case 1:
-                if(side == "P" || side == "p") {
-                    money += amount;
-                    result += " -- Player wins! You win " + std::to_string(amount) + "\n";
-                } else {
-                    money -= amount;
-                    result += " -- Player wins! You lose " + std::to_string(amount) + "\n";
-                }
-                break;
-            case 2:
-                if(side == "B" || side == "b") {
-                    money += amount;
-                    result += " -- Banker wins! You win " + std::to_string(amount) + "\n";
-                } else {
-                    money -= amount;
-                    result += " -- Banker wins! You lose " + std::to_string(amount) + "\n";
-                }
-                break;
-            //include ties and special wins
-            case 3:
-                break;
-            case 4:
-                break;
-            case 5:
-                break;
+        if (betAmt <= 0) {
+            std::cout << "Main bet must be > 0.\n\n";
+            continue;
         }
-        std::cout << result << "\n";
+        if (totalBet > money) {
+            std::cout << "Not enough funds. Balance: $" << money << "\n\n";
+            continue;
+        }
+
+        Player player;
+        player.updateBets(side, betAmt, dragonAmt, pandaAmt);
+
+        std::string result;
+        int outcome = play(deck, result);
+        std::cout << "\n" << result << "\n";
+
+        // Outcome labels
+        const char* labels[] = {"", "Player wins", "Banker wins", "Tie — push",
+                                 "Panda 8 — Player wins!", "Dragon 7 — Banker wins!"};
+        std::cout << labels[outcome];
+        if (outcome == 4 && pandaAmt > 0) std::cout << "  [Panda side bet pays 25:1!]";
+        if (outcome == 5 && dragonAmt > 0) std::cout << "  [Dragon side bet pays 40:1!]";
+        std::cout << "\n";
+
+        int net = player.calculatePayout(outcome);
+        money += net;
+
+        std::cout << "Net: " << (net >= 0 ? "+" : "") << net
+                  << "  |  Balance: $" << money << "\n\n";
+
+        if (money <= 0) {
+            std::cout << "You're broke! Game over.\n";
+            break;
+        }
     }
 
-    
+    std::cout << "Final balance: $" << money << ". Thanks for playing!\n";
     return 0;
 }
 
-int convert(const  std::string &card) {
-    std::string rank = card.substr(0, card.length() - 3); // Adjusted to handle 10 correctly
+int convert(const std::string &card) {
+    std::string rank = card.substr(0, card.length() - 3);
     if (rank == "A") return 1;
     if (rank == "K" || rank == "Q" || rank == "J" || rank == "10") return 0;
     return std::stoi(rank);
 }
 
-//converts totals to winner value
+// 0=error, 1=player, 2=banker, 3=tie, 4=panda8(player 3-card 8), 5=dragon7(banker 3-card 7)
 int eval(int playerTotal, int bankerTotal, bool player3, bool banker3) {
-    int playerMod = playerTotal % 10;
-    int bankerMod = bankerTotal % 10;
-    if (playerMod > bankerMod){
-        if (player3 && playerMod==8) return 4; //player win with panda
+    int pm = playerTotal % 10;
+    int bm = bankerTotal % 10;
+    if (pm > bm) {
+        if (player3 && pm == 8) return 4; // Panda 8
         return 1;
-    } //player win
-    if (bankerMod > playerMod){
-        if (banker3 && bankerMod==8) return 5; //banker win with dragon
+    }
+    if (bm > pm) {
+        if (banker3 && bm == 7) return 5; // Dragon 7
         return 2;
-    } //banker win
-    return 3; //tie
+    }
+    return 3; // tie
 }
 
-//change to input a reference to a string that gets modified by current output
-//actual return now becomes int of who won
-//0 = error 1 = player, 2 = banker, 3 = tie, 4 = panda, 5 = dragon
 int play(Cards &deck, std::string &result) {
     int playerTotal = 0;
     int bankerTotal = 0;
 
-    //pull for player, then banker, then player again, banker again, then decide third cards
-    std::string playerCard1 = deck.draw();
-    playerTotal += convert(playerCard1);
-    std::string bankerCard1 = deck.draw();
-    bankerTotal += convert(bankerCard1);
-    //first cards drawn
-
-    std::string playerCard2 = deck.draw();
-    playerTotal += convert(playerCard2);
-    std::string bankerCard2 = deck.draw();
-    bankerTotal += convert(bankerCard2);
-    //second cards drawn
+    std::string playerCard1 = deck.draw(); playerTotal += convert(playerCard1);
+    std::string bankerCard1 = deck.draw(); bankerTotal += convert(bankerCard1);
+    std::string playerCard2 = deck.draw(); playerTotal += convert(playerCard2);
+    std::string bankerCard2 = deck.draw(); bankerTotal += convert(bankerCard2);
 
     std::string playerCard3 = "";
     std::string bankerCard3 = "";
     bool playerThirdCard = false;
     bool bankerThirdCard = false;
 
-    //make the string to be returned
     result = std::string("Player: ") + playerCard1 + " " + playerCard2;
 
-    //naturals
+    // Naturals: no third cards drawn
     if (playerTotal % 10 >= 8 || bankerTotal % 10 >= 8) {
-        result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2;
+        result += std::string("  Banker: ") + bankerCard1 + " " + bankerCard2;
         return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
     }
+
+    // Player draws on 0–5
     if (playerTotal % 10 <= 5) {
         playerCard3 = deck.draw();
         playerThirdCard = true;
         playerTotal += convert(playerCard3);
-        result += " ";
-        result += playerCard3;
+        result += " " + playerCard3;
     }
-
-    //player third card rule
 
     if (!playerCard3.empty()) {
-        //banker third card rule based on playerCard3
-        int playerThirdCardValue = convert(playerCard3);
-        if (bankerTotal % 10 <= 2) {
+        // Banker third card rules when player drew
+        int p3v = convert(playerCard3);
+        bool bankerDraws = false;
+        int bm = bankerTotal % 10;
+        if      (bm <= 2)                                    bankerDraws = true;
+        else if (bm == 3 && p3v != 8)                        bankerDraws = true;
+        else if (bm == 4 && p3v >= 2 && p3v <= 7)            bankerDraws = true;
+        else if (bm == 5 && p3v >= 4 && p3v <= 7)            bankerDraws = true;
+        else if (bm == 6 && (p3v == 6 || p3v == 7))          bankerDraws = true;
+        // bm == 7: never draws
+
+        if (bankerDraws) {
             bankerCard3 = deck.draw();
             bankerThirdCard = true;
             bankerTotal += convert(bankerCard3);
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
-            return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
+            result += std::string("  Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
+        } else {
+            result += std::string("  Banker: ") + bankerCard1 + " " + bankerCard2;
         }
-        else if (bankerTotal % 10 == 3 && playerThirdCardValue != 8) {
-            bankerCard3 = deck.draw();
-            bankerThirdCard = true;
-            bankerTotal += convert(bankerCard3);
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
-            return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
-        }
-        else if (bankerTotal % 10 == 4 && (playerThirdCardValue >= 2 && playerThirdCardValue <= 7)) {
-            bankerCard3 = deck.draw();
-            bankerThirdCard = true;
-            bankerTotal += convert(bankerCard3);
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
-            return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
-        }
-        else if (bankerTotal % 10 == 5 && (playerThirdCardValue >= 4 && playerThirdCardValue <= 7)) {
-            bankerCard3 = deck.draw();
-            bankerThirdCard = true;
-            bankerTotal += convert(bankerCard3);
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
-            return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
-        }
-        else if (bankerTotal % 10 == 6 && (playerThirdCardValue == 6 || playerThirdCardValue == 7)) {
-            bankerCard3 = deck.draw();
-            bankerThirdCard = true;
-            bankerTotal += convert(bankerCard3);
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
-            return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
-        }
-        //does not draw on 7 at all
-        result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2;
-        return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
-    }
-    else {
+    } else {
+        // Player stood; banker draws on 0–5
         if (bankerTotal % 10 <= 5) {
             bankerCard3 = deck.draw();
             bankerThirdCard = true;
             bankerTotal += convert(bankerCard3);
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
+            result += std::string("  Banker: ") + bankerCard1 + " " + bankerCard2 + " " + bankerCard3;
         } else {
-            result += std::string(" Banker: ") + bankerCard1 + " " + bankerCard2;
+            result += std::string("  Banker: ") + bankerCard1 + " " + bankerCard2;
         }
     }
+
     return eval(playerTotal, bankerTotal, playerThirdCard, bankerThirdCard);
-    
 }

@@ -8,7 +8,7 @@
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -O2
 
-SRCS = baccarat.cpp cards.cpp
+SRCS = baccarat.cpp cards.cpp player.cpp
 OBJS = $(SRCS:.cpp=.o)
 TARGET = baccarat
 

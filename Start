@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Start — build (if needed), launch the baccarat web server in the background,
+#         and open the page in your browser.
+#
+# Usage:
+#   ./Start              # default port 8000
+#   ./Start 9000         # custom port
+
+set -e
+cd "$(dirname "$0")"
+
+PORT="${1:-8000}"
+PIDFILE=".server.pid"
+LOGFILE="server.log"
+
+# 1. Build the C++ binary if missing or out of date
+if [ ! -f baccarat ] || [ baccarat.cpp -nt baccarat ] || [ player.cpp -nt baccarat ] || [ cards.cpp -nt baccarat ]; then
+    echo "==> Building baccarat..."
+    make -s
+fi
+
+# 2. Set up Python venv if missing
+if [ ! -d .venv ]; then
+    echo "==> Creating Python venv (.venv)..."
+    python3 -m venv .venv
+    .venv/bin/pip install -q --upgrade pip
+    .venv/bin/pip install -q -r requirements.txt
+fi
+
+# 3. Already running?
+if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    echo "Server already running (PID $(cat "$PIDFILE"))."
+    echo "Open http://localhost:${PORT}  —  run ./Close to stop."
+    exit 0
+fi
+
+# 4. Anything else squatting on the port?
+if command -v lsof >/dev/null && lsof -ti:"$PORT" >/dev/null 2>&1; then
+    echo "Port $PORT is already in use. Run ./Close or pick another port: ./Start 9000"
+    exit 1
+fi
+
+# 5. Launch uvicorn in the background
+echo "==> Starting server on http://localhost:${PORT} ..."
+nohup .venv/bin/uvicorn server:app --host 127.0.0.1 --port "$PORT" \
+    >"$LOGFILE" 2>&1 &
+echo $! > "$PIDFILE"
+
+# 6. Wait for it to be ready, then open the browser
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -s -o /dev/null "http://127.0.0.1:${PORT}/health"; then
+        break
+    fi
+    sleep 0.3
+done
+
+if command -v open >/dev/null; then
+    open "http://localhost:${PORT}"
+elif command -v xdg-open >/dev/null; then
+    xdg-open "http://localhost:${PORT}"
+fi
+
+echo "    PID:  $(cat "$PIDFILE")"
+echo "    Logs: $LOGFILE"
+echo "    Stop: ./Close"
